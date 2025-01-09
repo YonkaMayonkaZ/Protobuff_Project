@@ -107,10 +107,12 @@ def create_netmeas_data_msg(report):
     wrapper.netmeas_data_msg.CopyFrom(netmeas_data)
     return wrapper
 
+stop_hello = threading.Event()
+
 # HELLO Thread Handler
 def hello_thread(sctp_sock, interval):
     last_send_time = 0
-    while True:
+    while not stop_hello.is_set():
         now = time.time()
         if now - last_send_time >= interval:
             hello_message = create_hello_msg()
@@ -148,7 +150,8 @@ if __name__ == "__main__":
     print("[SCTP] Connected.")
 
     # Start HELLO Thread
-    threading.Thread(target=hello_thread, args=(sctp_sock, interval), daemon=True).start()
+    thrd = threading.Thread(target=hello_thread, args=(sctp_sock, interval), daemon=True)
+    thrd.start()
 
     # NETSTAT_REQ and NETSTAT_RESP
     netstat_req_message = create_netstat_req_msg(students)
@@ -182,6 +185,8 @@ if __name__ == "__main__":
     netmeas_data_ack_message = receive_msg(tcp_sock)
     print("[NETMEAS_DATA_ACK] Received NETMEAS data acknowledgment.")
 
+    stop_hello.set()
+    thrd.join()
     # Cleanup
     sctp_sock.close()
     tcp_sock.close()
