@@ -1,0 +1,111 @@
+syntax = "proto3";
+
+enum ece441_type {
+    ECE441_HELLO = 0;
+    ECE441_CONN_REQ = 1;
+    ECE441_CONN_RESP = 2;
+    ECE441_NETSTAT_REQ = 3;
+    ECE441_NETSTAT_RESP = 4;
+    ECE441_NETSTAT_DATA = 5;
+    ECE441_NETSTAT_DATA_ACK = 6;
+    ECE441_NETMEAS_REQ = 7;
+    ECE441_NETMEAS_RESP = 8;
+    ECE441_NETMEAS_DATA = 9;
+    ECE441_NETMEAS_DATA_ACK = 10;
+}
+
+enum ece441_direction {
+    NOT_SET = 0;
+    SUCCESSFUL = 1;
+    UNSUCCESSFUL = 2;
+}
+
+message ece441_header {
+     optional uint32 id = 1;
+     optional ece441_type type = 2;
+}
+
+message ece441_person {
+     uint32 aem = 1;
+     string name = 2;
+     string email = 3;
+}
+
+message conn_req {
+     ece441_header header = 1;
+     repeated ece441_person student = 2;
+}
+
+message hello {
+     ece441_header header = 1;
+}
+
+message conn_resp {
+     ece441_header header = 1;
+     optional ece441_direction direction = 2;
+     optional uint32 interval = 3;
+}
+
+
+message netstat_req {
+     ece441_header header = 1;
+     repeated ece441_person student = 2;
+}
+
+message netstat_resp {
+     ece441_header header = 1;
+     optional ece441_direction direction = 2;
+}
+
+message netstat_data {
+     ece441_header header = 1;
+     optional string mac_address = 2;
+     optional string ip_address = 3;
+}
+
+message netstat_data_ack {
+     ece441_header header = 1;
+     optional ece441_direction direction = 2;
+}
+
+message netmeas_req {
+     ece441_header header = 1;
+     repeated ece441_person student = 2;
+}
+
+message netmeas_resp {
+     ece441_header header = 1;
+     optional ece441_direction direction = 2;
+     optional uint32 interval = 3;
+     optional uint32 port = 4;
+}
+
+message netmeas_data {
+     ece441_header header = 1;
+     optional ece441_direction direction = 2;
+     optional float report = 3;
+}
+
+message netmeas_data_ack {
+     ece441_header header = 1;
+     optional ece441_direction direction = 2;
+}
+
+message project_msg {
+     oneof msg {
+        hello hello_msg = 1;
+        conn_req conn_req_msg = 2; 
+        conn_resp conn_resp_msg = 3;
+        netstat_req netstat_req_msg = 4;
+        netstat_resp netstat_resp_msg = 5;
+        netstat_data netstat_data_msg = 6;
+        netstat_data_ack netstat_data_ack_msg = 7;
+        netmeas_req netmeas_req_msg = 8;
+        netmeas_resp netmeas_resp_msg = 9;
+        netmeas_data netmeas_data_msg = 10;
+        netmeas_data_ack netmeas_data_ack = 11;
+      }
+}
+
+
+
