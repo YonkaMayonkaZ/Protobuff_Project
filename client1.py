@@ -1,9 +1,8 @@
 import socket
 import time
-import struct
 import threading
 import subprocess
-import json
+import re
 from sctp import sctpsocket_tcp
 import project_messages_pb2 as pb
 
@@ -49,7 +48,7 @@ def receive_msg(sock):
     return msg
 
 # Message Creation Handlers
-def create_conn_req_msg(student_details):
+def new_conn_req_msg(student_details):
     header = pb.ece441_header()
     header.id = TEAM_ID
     header.type = pb.ECE441_CONN_REQ
@@ -64,7 +63,7 @@ def create_conn_req_msg(student_details):
     wrapper.conn_req_msg.CopyFrom(conn_req)
     return wrapper
 
-def create_hello_msg():
+def new_hello_msg():
     header = pb.ece441_header()
     header.id = TEAM_ID
     header.type = pb.ECE441_HELLO
@@ -74,7 +73,7 @@ def create_hello_msg():
     wrapper.hello_msg.CopyFrom(hello_msg)
     return wrapper
 
-def create_netstat_req_msg(student_details):
+def new_netstat_req_msg(student_details):
     header = pb.ece441_header()
     header.id = TEAM_ID
     header.type = pb.ECE441_NETSTAT_REQ
@@ -89,19 +88,19 @@ def create_netstat_req_msg(student_details):
     wrapper.netstat_req_msg.CopyFrom(netstat_req)
     return wrapper
 
-def create_netstat_data_msg():
+def new_netstat_data_msg():
     header = pb.ece441_header()
     header.id = TEAM_ID
     header.type = pb.ECE441_NETSTAT_DATA
     netstat_data = pb.netstat_data()
     netstat_data.header.CopyFrom(header)
-    netstat_data.mac_address = "00:1A:2B:3C:4D:5E"
-    netstat_data.ip_address = "192.168.1.100"
+    netstat_data.mac_address = "F0:57:A6:88:34:75"
+    netstat_data.ip_address = "172.28.219.240"
     wrapper = pb.project_msg()
     wrapper.netstat_data_msg.CopyFrom(netstat_data)
     return wrapper
 
-def create_netmeas_req_msg(student_details):
+def new_netmeas_req_msg(student_details):
     header = pb.ece441_header()
     header.id = TEAM_ID
     header.type = pb.ECE441_NETMEAS_REQ
@@ -116,7 +115,7 @@ def create_netmeas_req_msg(student_details):
     wrapper.netmeas_req_msg.CopyFrom(netmeas_req)
     return wrapper
 
-def create_netmeas_data_msg(report):
+def new_netmeas_data_msg(report):
     header = pb.ece441_header()
     header.id = TEAM_ID
     header.type = pb.ECE441_NETMEAS_DATA
@@ -131,27 +130,25 @@ stop_hello = threading.Event()
 
 # HELLO Thread Handler
 def hello_thread(sctp_sock, interval):
-    last_send_time = 0
     while not stop_hello.is_set():
-        now = time.time()
-        if now - last_send_time >= interval:
-            # Send HELLO message
-            hello_message = create_hello_msg()
-            send_msg(sctp_sock, hello_message)
-            print("[HELLO] Sent HELLO message.")
-            last_send_time = now
+        # Wait for the specified interval
+        time.sleep(interval)
 
-        # Try to receive a HELLO message from the server
+        # Send HELLO message
+        hello_message = new_hello_msg()
+        send_msg(sctp_sock, hello_message)
+        print("[HELLO] Sent HELLO message.")
+
+        # Try to receive a HELLO message from the server after sending
         try:
-            sctp_sock.settimeout(1)  # Set timeout to avoid blocking indefinitely
+            sctp_sock.settimeout(1)  # Set a short timeout for receiving
             received_message = receive_msg(sctp_sock)
             if received_message.WhichOneof("msg") == "hello_msg":
                 print(f"[HELLO] Received HELLO message from server with ID: {received_message.hello_msg.header.id}")
         except socket.timeout:
-            # Timeout indicates no message received within the period
-            pass
+            print("[HELLO] No HELLO message received after sending.")
 
-        time.sleep(0.3)
+
 
 
 
@@ -170,7 +167,7 @@ if __name__ == "__main__":
     ]
 
     # CONN_REQ and CONN_RESP
-    conn_req_message = create_conn_req_msg(students)
+    conn_req_message = new_conn_req_msg(students)
     send_msg(tcp_sock, conn_req_message)
     conn_resp_message = receive_msg(tcp_sock)
     interval = conn_resp_message.conn_resp_msg.interval
@@ -186,19 +183,19 @@ if __name__ == "__main__":
     thrd.start()
 
     # NETSTAT_REQ and NETSTAT_RESP
-    netstat_req_message = create_netstat_req_msg(students)
+    netstat_req_message = new_netstat_req_msg(students)
     send_msg(tcp_sock, netstat_req_message)
     netstat_resp_message = receive_msg(tcp_sock)
     print("[NETSTAT_RESP] Received NETSTAT response.")
 
     # NETSTAT_DATA and NETSTAT_DATA_ACK
-    netstat_data_message = create_netstat_data_msg()
+    netstat_data_message = new_netstat_data_msg()
     send_msg(tcp_sock, netstat_data_message)
     netstat_data_ack_message = receive_msg(tcp_sock)
     print("[NETSTAT_DATA_ACK] Received NETSTAT data acknowledgment.")
 
     # NETMEAS_REQ and NETMEAS_RESP
-    netmeas_req_message = create_netmeas_req_msg(students)
+    netmeas_req_message = new_netmeas_req_msg(students)
     send_msg(tcp_sock, netmeas_req_message)
     netmeas_resp_message = receive_msg(tcp_sock)
     interval, port = netmeas_resp_message.netmeas_resp_msg.interval, netmeas_resp_message.netmeas_resp_msg.port
@@ -206,13 +203,20 @@ if __name__ == "__main__":
 
     # iperf3 Throughput Test
     result = subprocess.run([
-        "iperf3", "-c", TCP_IP, "-p", str(port), "-t", str(interval), "--json"
+        "iperf3", "-c", TCP_IP, "-p", str(port), "-t", str(interval)
     ], capture_output=True, text=True)
-    bandwidth = json.loads(result.stdout)['end']['sum_received']['bits_per_second'] / 1e6
-    print(f"[IPERF3] Bandwidth: {bandwidth:.2f} Mbps.")
+
+    # Extract bandwidth from standard output using regex
+    match = re.search(r'(\d+.\d+)\s+Mbits/sec', result.stdout)
+    if match:
+        bandwidth = float(match.group(1))
+        print(f"[IPERF3] Bandwidth: {bandwidth:.2f} Mbps.")
+    else:
+        print("[ERROR] Unable to extract bandwidth from iperf3 output.")
+
 
     # NETMEAS_DATA and NETMEAS_DATA_ACK
-    netmeas_data_message = create_netmeas_data_msg(bandwidth)
+    netmeas_data_message = new_netmeas_data_msg(bandwidth)
     send_msg(tcp_sock, netmeas_data_message)
     netmeas_data_ack_message = receive_msg(tcp_sock)
     print("[NETMEAS_DATA_ACK] Received NETMEAS data acknowledgment.")
