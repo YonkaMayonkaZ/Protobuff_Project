@@ -26,6 +26,26 @@ def receive_msg(sock):
     data = sock.recv(length)
     msg = pb.project_msg()
     msg.ParseFromString(data)
+
+    """# Print message type and payload
+    msg_type = msg.WhichOneof("msg")
+    print(f"[RECEIVED] Message Type: {msg_type}")
+    
+    if msg_type == "conn_resp_msg":
+        print(f"  Interval: {msg.conn_resp_msg.interval}")
+    elif msg_type == "netstat_resp_msg":
+        print("  NETSTAT Response received.")
+    elif msg_type == "netstat_data_ack_msg":
+        print("  NETSTAT Data Acknowledgment received.")
+    elif msg_type == "netmeas_resp_msg":
+        print(f"  Interval: {msg.netmeas_resp_msg.interval}, Port: {msg.netmeas_resp_msg.port}")
+    elif msg_type == "netmeas_data_ack_msg":
+        print("  NETMEAS Data Acknowledgment received.")
+    elif msg_type == "hello_msg":
+        print("  HELLO Message received.")
+    else:
+        print("  Unknown message type.") """
+
     return msg
 
 # Message Creation Handlers
@@ -115,12 +135,24 @@ def hello_thread(sctp_sock, interval):
     while not stop_hello.is_set():
         now = time.time()
         if now - last_send_time >= interval:
+            # Send HELLO message
             hello_message = create_hello_msg()
             send_msg(sctp_sock, hello_message)
             print("[HELLO] Sent HELLO message.")
             last_send_time = now
 
+        # Try to receive a HELLO message from the server
+        try:
+            sctp_sock.settimeout(1)  # Set timeout to avoid blocking indefinitely
+            received_message = receive_msg(sctp_sock)
+            if received_message.WhichOneof("msg") == "hello_msg":
+                print(f"[HELLO] Received HELLO message from server with ID: {received_message.hello_msg.header.id}")
+        except socket.timeout:
+            # Timeout indicates no message received within the period
+            pass
+
         time.sleep(0.3)
+
 
 
 # Main Execution
